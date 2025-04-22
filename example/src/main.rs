@@ -1,5 +1,7 @@
 use std::env;
 
+use jupiter_swap_api_client::quote::{ParamsMode, SwapMode, UltraQuoteRequest};
+use jupiter_swap_api_client::JupiterUltraSwapApiClient;
 use jupiter_swap_api_client::{
     quote::QuoteRequest, swap::SwapRequest, transaction_config::TransactionConfig,
     JupiterSwapApiClient,
@@ -15,6 +17,39 @@ pub const TEST_WALLET: Pubkey = pubkey!("2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSp
 
 #[tokio::main]
 async fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    match args[1].as_str() {
+        "--ultra" => call_ultra().await,
+        "--manual" => call_manual().await,
+        _ => println!("Invalid argument. Use --ultra or --manual"),
+    }
+}
+
+
+async fn call_ultra() {
+    let api_base_url = "https://ultra-api.jup.ag".into();
+    println!("Using base url: {}", api_base_url);
+
+    let jupiter_swap_api_client = JupiterUltraSwapApiClient::new(api_base_url);
+
+    let quote_request = UltraQuoteRequest {
+        input_mint: USDC_MINT,
+        output_mint: NATIVE_MINT,
+        amount: 1_000_000,
+        swap_mode: Some(SwapMode::ExactIn),
+        mode: ParamsMode::Ultra,
+        taker: Some(Pubkey::new_unique()),
+    };
+
+    let quote_response = jupiter_swap_api_client
+        .quote(&quote_request)
+        .await
+        .unwrap();
+    println!("{quote_response:#?}");
+}
+
+async fn call_manual() {
     let api_base_url = env::var("API_BASE_URL").unwrap_or("https://quote-api.jup.ag/v6".into());
     println!("Using base url: {}", api_base_url);
 

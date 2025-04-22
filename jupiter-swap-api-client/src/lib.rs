@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use quote::{InternalQuoteRequest, QuoteRequest, QuoteResponse};
+use quote::{InternalQuoteRequest, QuoteRequest, QuoteResponse, UltraQuoteRequest, UltraQuoteResponse};
 use reqwest::{Client, Response};
 use serde::de::DeserializeOwned;
 use swap::{SwapInstructionsResponse, SwapInstructionsResponseInternal, SwapRequest, SwapResponse};
@@ -14,6 +14,11 @@ pub mod transaction_config;
 
 #[derive(Clone)]
 pub struct JupiterSwapApiClient {
+    pub base_path: String,
+}
+
+#[derive(Clone)]
+pub struct JupiterUltraSwapApiClient {
     pub base_path: String,
 }
 
@@ -91,5 +96,24 @@ impl JupiterSwapApiClient {
         check_status_code_and_deserialize::<SwapInstructionsResponseInternal>(response)
             .await
             .map(Into::into)
+    }
+}
+
+impl JupiterUltraSwapApiClient {
+    pub fn new(base_path: String) -> Self {
+        Self { base_path }
+    }
+
+    pub async fn quote(
+        &self,
+        quote_request: &UltraQuoteRequest,
+    ) -> Result<UltraQuoteResponse, ClientError> {
+        let url = format!("{}/order", self.base_path);
+        let response = Client::new()
+            .get(url)
+            .query(&quote_request)
+            .send()
+            .await?;
+        check_status_code_and_deserialize(response).await
     }
 }

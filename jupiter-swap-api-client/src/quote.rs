@@ -7,7 +7,7 @@ use crate::route_plan_with_metadata::RoutePlanWithMetadata;
 use crate::serde_helpers::field_as_string;
 use anyhow::{anyhow, Error};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::{self, Deserialize, Serialize, Serializer, Deserializer};
 use solana_sdk::pubkey::Pubkey;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -189,6 +189,47 @@ impl From<QuoteRequest> for InternalQuoteRequest {
     }
 }
 
+#[derive(Serialize, Deserialize, Default, PartialEq, Clone, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum ParamsMode {
+    #[default]
+    Ultra,
+    Manual,
+}
+
+impl FromStr for ParamsMode {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "ultra" | "Ultra" => Ok(Self::Ultra),
+            "manual" | "Manual" => Ok(Self::Manual),
+            _ => Err(anyhow!("{} is not a valid ParamsMode", s)),
+        }
+    }
+}
+
+// Ultra Quote Request args
+// TODO: add optional args for manual quote request
+#[derive(Serialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct UltraQuoteRequest {
+    #[serde(with = "field_as_string")]
+    pub input_mint: Pubkey,
+    #[serde(with = "field_as_string")]
+    pub output_mint: Pubkey,
+    /// The amount to swap, have to factor in the token decimals.
+    #[serde(with = "field_as_string")]
+    pub amount: u64,
+    /// (ExactIn or ExactOut) Defaults to ExactIn.
+    /// ExactOut is for supporting use cases where you need an exact token amount, like payments.
+    /// In this case the slippage is on the input token.
+    pub swap_mode: Option<SwapMode>,
+    pub mode: ParamsMode,
+    #[serde(with = "pubkey_as_string")]
+    pub taker: Option<Pubkey>,
+}
+
 /// Comma delimited list of dex labels
 type Dexes = String;
 
@@ -227,4 +268,93 @@ pub struct QuoteResponse {
     pub context_slot: u64,
     #[serde(default)]
     pub time_taken: f64,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+pub enum SwapType {
+    #[serde(rename = "aggregator")]
+    Aggregator,
+    #[serde(rename = "rfq")]
+    Rfq,
+}
+
+impl FromStr for SwapType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "Aggregator" | "aggregator" => Ok(Self::Aggregator),
+            "Rfq" | "rfq" => Ok(Self::Rfq),
+            _ => Err(anyhow!("{} is not a valid SwapType", s)),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UltraQuoteResponse {
+    pub request_id: String,
+    #[serde(with = "field_as_string")]
+    pub input_mint: Pubkey,
+    #[serde(with = "field_as_string")]
+    pub output_mint: Pubkey,
+    #[serde(with = "field_as_string")]
+    pub in_amount: u64,
+    #[serde(with = "field_as_string")]
+    pub out_amount: u64,
+    // TODO: handle serializing this from Option<Pubkey> to String
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fee_mint: Option<String>,
+    #[serde(with = "field_as_string")]
+    pub other_amount_threshold: u64,
+    pub swap_mode: SwapMode,
+    pub mode: ParamsMode,
+    pub router: String,
+    pub swap_type: SwapType,
+    pub slippage_bps: u16,
+    // TODO: handle serializing this from Option<VersionedTransaction> to String
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expire_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub maker: Option<Pubkey>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quote_id: Option<String>,
+    pub gasless: bool,
+    pub fee_bps: u16,
+    pub prioritization_fee_lamports: u64,
+    pub price_impact_pct: Decimal,
+    pub route_plan: RoutePlanWithMetadata,
+    #[serde(default)]
+    pub time_taken: f64,
+}
+
+
+pub mod pubkey_as_string {
+    use super::*;
+
+    pub fn serialize<S>(pk: &Option<Pubkey>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match pk {
+            Some(pubkey) => serializer.serialize_str(&pubkey.to_string()),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Pubkey>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt_str: Option<String> = Option::deserialize(deserializer)?;
+        match opt_str {
+            Some(s) => {
+                let pk = s.parse::<Pubkey>().map_err(serde::de::Error::custom)?;
+                Ok(Some(pk))
+            }
+            None => Ok(None),
+        }
+    }
 }
