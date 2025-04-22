@@ -4,11 +4,12 @@
 use std::{collections::HashMap, str::FromStr};
 
 use crate::route_plan_with_metadata::RoutePlanWithMetadata;
-use crate::serde_helpers::field_as_string;
+use crate::serde_helpers::{field_as_string, option_field_as_string, option_tx_as_string};
 use anyhow::{anyhow, Error};
 use rust_decimal::Decimal;
-use serde::{self, Deserialize, Serialize, Serializer, Deserializer};
+use serde::{self, Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::transaction::VersionedTransaction;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -226,7 +227,7 @@ pub struct UltraQuoteRequest {
     /// In this case the slippage is on the input token.
     pub swap_mode: Option<SwapMode>,
     pub mode: ParamsMode,
-    #[serde(with = "pubkey_as_string")]
+    #[serde(with = "option_field_as_string")]
     pub taker: Option<Pubkey>,
 }
 
@@ -302,9 +303,8 @@ pub struct UltraQuoteResponse {
     pub in_amount: u64,
     #[serde(with = "field_as_string")]
     pub out_amount: u64,
-    // TODO: handle serializing this from Option<Pubkey> to String
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fee_mint: Option<String>,
+    #[serde(default, with = "option_field_as_string")]
+    pub fee_mint: Option<Pubkey>,
     #[serde(with = "field_as_string")]
     pub other_amount_threshold: u64,
     pub swap_mode: SwapMode,
@@ -312,9 +312,8 @@ pub struct UltraQuoteResponse {
     pub router: String,
     pub swap_type: SwapType,
     pub slippage_bps: u16,
-    // TODO: handle serializing this from Option<VersionedTransaction> to String
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transaction: Option<String>,
+    #[serde(default, with = "option_tx_as_string")]
+    pub transaction: Option<VersionedTransaction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expire_at: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -328,33 +327,4 @@ pub struct UltraQuoteResponse {
     pub route_plan: RoutePlanWithMetadata,
     #[serde(default)]
     pub time_taken: f64,
-}
-
-
-pub mod pubkey_as_string {
-    use super::*;
-
-    pub fn serialize<S>(pk: &Option<Pubkey>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match pk {
-            Some(pubkey) => serializer.serialize_str(&pubkey.to_string()),
-            None => serializer.serialize_none(),
-        }
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Pubkey>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let opt_str: Option<String> = Option::deserialize(deserializer)?;
-        match opt_str {
-            Some(s) => {
-                let pk = s.parse::<Pubkey>().map_err(serde::de::Error::custom)?;
-                Ok(Some(pk))
-            }
-            None => Ok(None),
-        }
-    }
 }
