@@ -192,7 +192,7 @@ impl From<QuoteRequest> for InternalQuoteRequest {
 /// Comma delimited list of dex labels
 type Dexes = String;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformFee {
     #[serde(with = "field_as_string")]
@@ -200,7 +200,7 @@ pub struct PlatformFee {
     pub fee_bps: u8,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct QuoteResponse {
     #[serde(with = "field_as_string")]
